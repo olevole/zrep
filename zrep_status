@@ -18,32 +18,30 @@ zrep_status(){
 	typeset check fs srcfs jdesthost destfs date lastsnap verbose=0
 	typeset printall=0
 	
-	if [[ "$1" == "-v" ]] ; then
+	if [ "$1" = "-v" ] ; then
 		verbose=1 ; shift
 	fi
 
-	if [[ "$1" == "" ]] ; then
+	if [ -z "$1" = "" ] ; then
 		set -- `zrep_list_master`
-	elif [[ "$1" == "-a" ]] ; then
+	elif [ "$1" = "-a" ] ; then
 		set -- `zrep_list`
 		printall=1
 	fi
 
-	while [[ "$1" != "" ]] ; do
+	while [ "$1" != "" ] ; do
 		fs="$1"
 
 		destfs=`zfs get -H -o value zrep:dest-fs $fs`
-		if [[ "$destfs" == "-" ]] || [[ "$destfs" == "" ]]; then
-			zrep_errquit "$fs is not a zrep registered filesystem"
-		fi
+		[ "$destfs" = "-" -o -z "$destfs" ] && zrep_errquit "$fs is not a zrep registered filesystem"
 
 		lastsnap=`getlastsnapsent $fs`
-		if [[ "$lastsnap" == "" ]] ; then
+		if [ -z "$lastsnap" ] ; then
 			date="[NEVER]"
 		else
 			date=`zfs get -H -o value creation $lastsnap`
 		fi
-		if ((printall)) && ((verbose)) ; then
+		if [ ${printall} -a ${verbose} ] ; then
 			# If we are printing out  ALL filesystems,
 			# then we have to make sure left side is always
 			#  "src filesystem", not "named filesystem"
@@ -56,12 +54,12 @@ zrep_status(){
 			srcfs="$fs"
 		fi
 
-		if ((verbose)) ; then
+		if [ ${verbose} ] ; then
 			desthost=`zfs get -H -o value zrep:dest-host $srcfs`
 			printf "%-25s->%-35s %s\n" $srcfs "$desthost:$destfs" "${date#????}"
 		else
 			printf "%-47s" $srcfs
-			print "last synced $date"
+			echo "last synced $date"
 		fi
 		shift
 	done
@@ -82,9 +80,7 @@ zrep_list_master(){
 	typeset srchost
 	for fs in `zfs get -H -o name -s local zrep:master "$@"` ; do
 		srchost=`zfs get -H -o value zrep:src-host $fs`
-		if [[ "$srchost" == "$Z_LOCAL_HOST" ]] ; then
-			print $fs
-		fi
+		[ "$srchost" = "$Z_LOCAL_HOST" ] && echo $fs
 	done
 }
 
@@ -92,7 +88,7 @@ zrep_list_master(){
 # Given ONE filesystem, print all zrep properties for it.
 # Note that this is internal routine. we do not validate input.
 list_verbose(){
-	print $1:
+	echo $1:
 	zfs get -H -o property,value -s $PROPTYPES all $1
 }
 
@@ -133,8 +129,8 @@ zrep_list(){
 
 
 
-	if [[ "$1" != "" ]] ; then
-		while [[ "$1" != "" ]] ; do
+	if [ -n "$1" ] ; then
+		while [ "$1" != "" ] ; do
 			if zfs list -t filesystem $1 >/dev/null 2>&1 ; then
 				$printcmd $1
 			else
@@ -148,7 +144,7 @@ zrep_list(){
 	# Must be "list all" now. But which output format?
 
 	# if not verbose, we have a nice shortcut
-	if (( $verbose == 0))  ; then
+	if [ $verbose ]  ; then
 		$printcmd
 		return
 	fi
@@ -166,7 +162,7 @@ zrep_list(){
 		# neccessary. Although we may pick up other user-set values,
 		# but that is not neccessarily a bad thing
 		zfs get -H -o property,value -s $PROPTYPES all $fs
-		print ""
+		echo ""
 	done
 	
 	

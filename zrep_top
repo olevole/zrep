@@ -13,37 +13,37 @@ AWKinclude zrep_failover
 ######## zrep_top continues here
 
 usage(){
-	print zrep v${ZREP_VERSION}: a program to replicate a zfs filesystem to another
-	print in an ongoing basis.
-	print More documentation at a later date.
-	print "  Philip Brown, 2012"
-	print ""
-	print Simple usage summary:
-	print 'zrep (init|-i) ZFS/fs remotehost remoteZFSpool/fs'
-	print 'zrep (sync|-S) [-q seconds] ZFS/fs'
-	print 'zrep (sync|-S) [-q seconds] all'
-	print 'zrep (sync|-S) ZFS/fs@snapshot    -- temporary retroactive sync'
-	print 'zrep (status|-s) [-v] [(-a|ZFS/fs)]'
-	print 'zrep refresh ZFS/fs               -- pull version of sync'
-	print 'zrep (list|-l) [-v]'
-	print 'zrep (expire|-e) [-L] (ZFS/fs ...)|(all)|()'
-	print 'zrep (changeconfig|-C) ZFS/fs remotehost remoteZFSpool/fs'
-	print 'zrep failover [-L] ZFS/fs'
-	print 'zrep takeover [-L] ZFS/fs'
-	print 'zrep clear ZFS/fs  -- REMOVE ZREP CONFIG AND SNAPS FROM FILESYSTEM'
-	print
-	print '   -q option says to Quietly ignore locked filesystems that have synced'
-	print '      more recently than the given amount of seconds'
-	print
-	print 'Paired commands for high-transaction systems:'
-	print '   zrep snaponly ZFS/fs'
-	print '   zrep synconly ZFS/fs'
-	print 'The above two commands split the simple sync subcommand, into two'
-	print 'separate steps, so that a database, etc. may resume while the sync'
-	print 'completes in the background'
-	print ''
-	print ' More detailed examples can be found at:'
-	print http://www.bolthole.com/solaris/zrep/zrep.documentation.html
+	echo zrep v${ZREP_VERSION}: a program to replicate a zfs filesystem to another
+	echo in an ongoing basis.
+	echo More documentation at a later date.
+	echo "  Philip Brown, 2012"
+	echo ""
+	echo Simple usage summary:
+	echo 'zrep (init|-i) ZFS/fs remotehost remoteZFSpool/fs'
+	echo 'zrep (sync|-S) [-q seconds] ZFS/fs'
+	echo 'zrep (sync|-S) [-q seconds] all'
+	echo 'zrep (sync|-S) ZFS/fs@snapshot    -- temporary retroactive sync'
+	echo 'zrep (status|-s) [-v] [(-a|ZFS/fs)]'
+	echo 'zrep refresh ZFS/fs               -- pull version of sync'
+	echo 'zrep (list|-l) [-v]'
+	echo 'zrep (expire|-e) [-L] (ZFS/fs ...)|(all)|()'
+	echo 'zrep (changeconfig|-C) ZFS/fs remotehost remoteZFSpool/fs'
+	echo 'zrep failover [-L] ZFS/fs'
+	echo 'zrep takeover [-L] ZFS/fs'
+	echo 'zrep clear ZFS/fs  -- REMOVE ZREP CONFIG AND SNAPS FROM FILESYSTEM'
+	echo
+	echo '   -q option says to Quietly ignore locked filesystems that have synced'
+	echo '      more recently than the given amount of seconds'
+	echo
+	echo 'Paired commands for high-transaction systems:'
+	echo '   zrep snaponly ZFS/fs'
+	echo '   zrep synconly ZFS/fs'
+	echo 'The above two commands split the simple sync subcommand, into two'
+	echo 'separate steps, so that a database, etc. may resume while the sync'
+	echo 'completes in the background'
+	echo ''
+	echo ' More detailed examples can be found at:'
+	echo http://www.bolthole.com/solaris/zrep/zrep.documentation.html
 }
 
 case "$1" in

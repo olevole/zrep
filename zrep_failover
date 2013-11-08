@@ -6,21 +6,19 @@
 zrep_failover(){
 	typeset local=0 fs snap="" remotehost remotefs check
 
-	if [[ "$1" == "-L" ]] ; then
+	if [ "$1" = "-L" ] ; then
 		local=1
 		shift
 	fi
 
-	if [[ "$1" == "" ]] ; then
+	if [ -z "$1" ] ; then
 		usage
 		exit 1
 	fi
 
 	zfs list $1 >/dev/null || zrep_errquit invalid filesystem $1
 	check=`zfs get -H -o value -s local zrep:master $1`
-	if [[ "$check" != "yes" ]] ; then
-		zrep_errquit $1 not master. Cannot fail over
-	fi
+	[ "$check" != "yes" ] && zrep_errquit $1 not master. Cannot fail over
 
 	fs="$1"
 	
@@ -39,9 +37,9 @@ zrep_failover(){
 	print setting readonly on local $fs, then syncing
 	zfs set readonly=on $fs
 
-	if ((local ==1)) ; then
+	if [ ${local} -eq 1 ] ; then
 		print failover for $1 in LOCAL mode
-		if [[ "$snap" == "" ]] ; then
+		if [ -z "$snap" ] ; then
 			snap=`getlastsnapsent $1`
 			zfs list $1 >/dev/null ||
 				zrep_errquit No last synced snap found for $1. Cannot fail over
@@ -57,7 +55,7 @@ zrep_failover(){
 		## If named snap, roll back.
 		## otherwise, "roll forward" by doing one last sync
 
-		if [[ "$snap" != "" ]] ; then
+		if [ -n "$snap" ] ; then
 			typeset snapname
 			snapname=${snap#*@}
 
@@ -86,7 +84,7 @@ zrep_failover(){
 	
 	zrep_unlock_fs $fs
 
-	if (( local ==0)) ;then
+	if [ ${local} -eq 0 ] ; then
 		print Setting master on $remotehost:$remotefs
 		zrep_ssh $remotehost $ZREP_PATH takeover -L $remotefs
 	fi
@@ -97,12 +95,12 @@ zrep_failover(){
 zrep_takeover(){
 	typeset fs snap remotehost remotefs check local=0
 
-	if [[ "$1" == "-L" ]] ; then
+	if [ "$1" = "-L" ] ; then
 		local=1
 		shift
 	fi
 	
-	if [[ "$1" == "" ]] ; then
+	if [ -z "$1" ] ; then
 		usage
 		exit 1
 	fi
@@ -121,7 +119,7 @@ zrep_takeover(){
 	remotefs=`zfs get -H -o value zrep:src-fs $fs`
 
 
-	if (( local == 0 )) ; then
+	if ( ${local} -eq 0 ] ; then
 
 		print starting failover from remote side $remotehost
 		zrep_ssh $remotehost $ZREP_PATH failover $remotefs
@@ -144,7 +142,7 @@ zrep_takeover(){
 	zrep_lock_fs $fs
 	zfs inherit readonly $fs
 
-	if [[ "$snap" != "" ]] ; then
+	if [ -n "$snap" ] ; then
 		print "WARNING: Before takeover, we will be rolling $fs"
 		print -n "   to  $snapname, made at: "
 		zfs get -H -o value creation $snap

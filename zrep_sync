@@ -29,7 +29,7 @@ synctosnap(){
 	typeset newsentlist
 
 	typeset srcfs snapname destsnap
-	if [[ "$desthost" == "" ]] ; then
+	if [ -z "$desthost" ] ; then
 		print ERROR: synctosnap did not receive all required args
 		zrep_errquit "args=$@"
 	fi
@@ -53,9 +53,7 @@ synctosnap(){
 
 	print Validating remote snap
 	zrep_ssh $desthost zfs list -t snapshot $destfs@$destsnap >/dev/null
-	if [[ $? -ne 0 ]] ; then
-		zrep_errquit  $destfs@$destsnap does not exist. Cannot roll to snap
-	fi
+	[ $? -ne 0 ] && zrep_errquit  $destfs@$destsnap does not exist. Cannot roll to snap
 	
 
 	print "WARNING: We will be rolling back  $destfs, on $desthost"
@@ -111,15 +109,13 @@ _snapandsync(){
 	# Do this BEFORE creating new snap, because we should make new snap
 	# if we cant do incremental anyway
 	sentsnap=`getlastsnapsent $srcfs`
-	if [[ "$sentsnap" == "" ]] ; then
+	if [ -z "$sentsnap" ] ; then
 		print zrep_sync could not find sent snap for $srcfs. 
 		zrep_errquit You must initialize $srcfs for zrep
 	fi
 
 	newsnap=`makesnap $srcfs`
-	if [[ "$newsnap" == "" ]] ; then
-		zrep_errquit zrep_sync could not create new snapshot for $srcfs
-	fi
+	[ -z "$newsnap" ] && zrep_errquit zrep_sync could not create new snapshot for $srcfs
 
 	_sync $srcfs $desthost $destfs $sentsnap $newsnap
 
@@ -132,23 +128,23 @@ _sync(){
 	typeset lastsent=$4 newsnap=$5
 	typeset snapname
 
-	if [[ "$lastsent" == "" ]] ; then
+	if [ -z "$lastsent" ] ; then
 		lastsent=`getlastsnapsent $srcfs`
-		if [[ "$lastsent" == "" ]] ; then
+		if [ -z "$lastsent" ] ; then
 			print zrep_sync could not find sent snap for $srcfs. 
 			zrep_errquit You must initialize $srcfs for zrep
 		fi
 	fi
 
-	if [[ "$newsnap" == "" ]] ; then
+	if [ -z "$newsnap" ] ; then
 		newsnap=`getlastsnap $srcfs`
-		if [[ "$newsnap" == "" ]] ; then
+		if [ -z "$newsnap" ] ; then
 			print zrep_sync could not find sent snap for $srcfs. 
 			zrep_errquit You must initialize $srcfs for zrep
 		fi
 	fi
 
-	if [[ "$newsnap" == "$lastsent" ]] ; then
+	if [ "$newsnap" = "$lastsent" ] ; then
 		print $newsnap already sent
 		return 0
 	fi
@@ -166,7 +162,7 @@ _sync(){
 	#   Sigh. but now we also do in _refreshpull
 	zfs send -I $lastsent $newsnap | 
 	   zrep_ssh $desthost zfs recv $destfs
-	if [[ $? -ne 0 ]] ; then
+	if [ $? -ne 0 ] ; then
 		zfs rename ${newsnap} ${newsnap}_unsent
 		zrep_errquit Problem doing sync for $newsnap. renamed to ${newsnap}_unsent
 	fi
@@ -174,14 +170,14 @@ _sync(){
 	#Even if we are "old mode", other side may not be.
 	# So try newer way first.
 	zrep_ssh $desthost zfs set $senttimeprop $destfs@$snapname
-	if [[ $? -ne 0 ]] ; then
+	if [ $? -ne 0 ] ; then
 		print WARNING: setting zrep:sent failed on $desthost:$destfs@$snapname
 		print Using fallback. Go patch your system
 		zrep_ssh $desthost zfs set zrep:lastsent=${newsnap} $destfs
 		zrep_ssh $desthost zfs set zrep:lastsenttime=${timeinsec} $destfs
 	fi
 
-	if (( Z_HAS_SNAPPROPS )) ; then
+	if [ ${Z_HAS_SNAPPROPS} ] ; then
 		zfs set $senttimeprop  ${newsnap}
 	else
 		#note that this is only for old-ZFS compatibility.
@@ -202,19 +198,14 @@ zrep_synconly(){
 	# at one point, accept multiple args. But not for now...?
 	srcfs=$1
 
-	[[ "$srcfs" == "" ]] && zrep_errquit No fileystem specified for synconly
+	[ -z "$srcfs" ] && zrep_errquit No fileystem specified for synconly
 
 	desthost=`zfs get -H -o value zrep:dest-host $srcfs`
 	destfs=`zfs get -H -o value zrep:dest-fs $srcfs`
-	if [[ $? -ne 0 ]] || [[ "$desthost" == "-" ]] || [[ "$destfs" == "-" ]];
-	then
-		zrep_errquit Problem getting zrep properties for fs $srcfs
-	fi
+	[ $? -ne 0  -o "$desthost" = "-" -o "$destfs" = "-" ] && zrep_errquit Problem getting zrep properties for fs $srcfs
 
 	zrep_lock_fs $srcfs
-	if [[ $? -ne 0 ]] ; then
-		zrep_errquit Failed to acquire zrep lock for $srcfs
-	fi
+	[ $? -ne 0 ] && zrep_errquit Failed to acquire zrep lock for $srcfs
 
 	_sync $srcfs $desthost $destfs || zrep_errquit sync failed for $srcfs
 
@@ -237,40 +228,35 @@ zrep_sync(){
 	typeset srcfs destfs desthost sentsnap newsnap
 	typeset quiettime=0
 
-	if [[ "$1" == "-q" ]] ; then
+	if [ "$1" = "-q" ] ; then
 		quiettime="$2"
 		shift
 		shift
-		if (( quiettime < 30 )) ; then
-			zrep_errquit "-q must use value greater than 30"
-		fi
+		[ ${quiettime} -lt 30 ] && zrep_errquit "-q must use value greater than 30"
 	fi
 
-	if [[ "$1" == "all" ]] ; then
+	if [ "$1" = "all" ] ; then
 		set -- `zrep_list_master`
-		if [[ "$1" == "" ]] ; then
+		if [ -z "$1" ] ; then
 			# Stay quiet, so we dont spew if in cron
 			#print No zrep mastered filesystems found
 			exit
 		fi
 	fi
 
-	if [[ "$1" == "" ]] ; then
+	if [ -z "$1" ] ; then
 		print Error: no filesystems specified for sync >/dev/fd/2
 		return 1
 	fi
 
-	while [[ "$1" != "" ]] ; do
+	while [ "$1" != "" ] ; do
 	srcfs="$1" 
 
-	[[ "$srcfs" == "" ]] && zrep_errquit No fileystem specified for sync
+	[ -z "$srcfs" ] && zrep_errquit No fileystem specified for sync
 
 	desthost=`zfs get -H -o value zrep:dest-host $srcfs`
 	destfs=`zfs get -H -o value zrep:dest-fs $srcfs`
-	if [[ $? -ne 0 ]] || [[ "$desthost" == "-" ]] || [[ "$destfs" == "-" ]];
-	then
-		zrep_errquit Problem getting zrep properties for fs $srcfs
-	fi
+	[ $? -ne 0 -o "$desthost" = "-" -o "$destfs" = "-" ] && zrep_errquit Problem getting zrep properties for fs $srcfs
 	
 	case $srcfs in
 		*@*)
@@ -281,21 +267,17 @@ zrep_sync(){
 
 	zrep_lock_fs $srcfs
 
-	if [[ $? -ne 0 ]] ; then
+	if [ $? -ne 0 ] ; then
 		# retry for lock for a while, if (quiettime>0 )
 
-		if ((quiettime==0)); then
-			zrep_errquit Cannot lock $srcfs. Cannot continue
-		fi
+		[ ${quiettime} -eq 0 ] && zrep_errquit Cannot lock $srcfs. Cannot continue
 		typeset currtime=`zrep_gettimeinseconds`  snaptime elapsed
 
 		snaptime=`getlastsynctime $srcfs`
-		if (( snaptime == 0 )) ; then
-			zrep_errquit quiet mode set, but no last snap for $srcfs
-		fi
+		[ $snaptime -eq 0 ] && zrep_errquit quiet mode set, but no last snap for $srcfs
 
 		elapsed=$((currtime - snaptime))
-		if ((elapsed > quiettime)) ; then
+		if [ ${elapsed} -gt ${quiettime} ]; then
 			print DEBUG: $elapsed seconds have elapsed since last sync of $srcfs
 			zrep_errquit quiet time limit of $quiettime seconds exceeded for busy fs $srcfs
 		else
@@ -354,29 +336,23 @@ zrep_refresh(){
 	# for now, just handle ONE arg, not multiple fs list
 
 	destfs="$1"
-	if [[ "$1" == "" ]] ; then
+	if [ -z "$1" ] ; then
 		print Error: no filesystems specified for refresh >/dev/fd/2
 		return 1
 	fi
 
 	master=`zfs get -H -o value -s local zrep:master $destfs`
-	if [[ "$master" == "yes" ]] ; then
-		zrep_errquit Sorry, you cant run refresh on a master mode fs $destfs
-	fi
+	[ "$master" = "yes" ] && zrep_errquit Sorry, you cant run refresh on a master mode fs $destfs
 
 	srchost=`zfs get -H -o value zrep:src-host $destfs`
 	srcfs=`zfs get -H -o value zrep:src-fs $destfs`
 
 	zrep_lock_fs $destfs
-	if [[ $? -ne 0 ]] ; then
-		zrep_errquit Cannot lock $destfs. Cannot continue
-	fi
+	[ $? -ne 0  && 	zrep_errquit Cannot lock $destfs. Cannot continue
 
 	print DEBUG: refresh step 1: Going to $srchost to snapshot $destfs
 	newsnap=`zrep_ssh $srchost $ZREP_PATH snaponly $srcfs`
-	if [[ $? -ne 0 ]] ; then
-		zrep_errquit snap of src $srcfs on $srchost failed
-	fi
+	[ $? -ne 0 ] && zrep_errquit snap of src $srcfs on $srchost failed
 	# yes, MORE paranoia..
 	case $newsnap in
 		*@zrep_*)
@@ -395,14 +371,10 @@ zrep_refresh(){
 
 	zrep_ssh $srchost $ZREP_PATH _refreshpull $newsnap |
 	  zfs recv $destfs
-	if [[ $? -ne 0 ]] ; then
-		zrep_errquit Unforseen error pulling snapshot $newsnap from $srchost
-	fi
+	[ $? -ne 0 ] && zrep_errquit Unforseen error pulling snapshot $newsnap from $srchost
 
 	zfs set $senttimeprop $destfs@$newseq
-	if [[ $? -ne 0 ]] ; then
-		print WARNING: expected local copy $destfs@newseq does not exist >/dev/fd/2
-	fi
+	[ $? -ne 0 ] && echo WARNING: expected local copy $destfs@newseq does not exist >/dev/fd/2
 
 	zrep_unlock_fs $destfs
 
@@ -424,9 +396,7 @@ _refreshpull(){
 	print DEBUG: _refreshpull: snapname=$snapname, fs=$fs >/dev/fd/2
 
 	zrep_lock_fs $fs
-	if [[ $? -ne 0  ]] ; then
-		zrep_errquit Could not lock $fs
-	fi
+	[ $? -ne 0  ] && zrep_errquit Could not lock $fs
 
 	#We should now;
 	# 1. compare to latest snap. quit if not latest
@@ -438,28 +408,19 @@ _refreshpull(){
 	#
 
 	lastsent=`getlastsnapsent $fs`
-	if [[ "$lastsent" == "" ]] ; then
-		zrep_errquit Canthappen: _refreshpull cant findlastsent snap
-	fi
+	[ -z "$lastsent" ] && zrep_errquit Canthappen: _refreshpull cant findlastsent snap
 	latest=`getlastsnap $fs`
 
-	if [[ "$latest" != "$snapname" ]] ; then
-		zrep_errquit Sync error: $snapname is not latest snap for $fs
-	fi
+	[ "$latest" != "$snapname" ] && zrep_errquit Sync error: $snapname is not latest snap for $fs
 
 	timeinsec=`zrep_gettimeinseconds`
 	senttimeprop="zrep:sent=$timeinsec"
 
-	if (( Z_HAS_SNAPPROPS ==0)) ; then
-		zrep_errquit Error: we currently only support modern ZFS that allows setting props on snaps
-	fi
+	[ ${Z_HAS_SNAPPROPS} -eq  0 ] && zrep_errquit Error: we currently only support modern ZFS that allows setting props on snaps
 
 	zfs send -I $lastsent $latest
 
-	if [[ $? -ne 0 ]] ; then
-		zrep_errquit Some kind of error during sending. Bailing out of _refreshpull
-	fi
-
+	[ $? -ne 0 ] && zrep_errquit Some kind of error during sending. Bailing out of _refreshpull
 
 	zfs set $senttimeprop $latest
 	zrep_unlock_fs $fs
@@ -481,7 +442,7 @@ _expire(){
 	typeset tmpfile=/var/run/zrep_expire.$$
 	typeset local=0 master
 
-	if [[ "$1" == "-L" ]] ; then
+	if [ "$1" = "-L" ] ; then
 		local=1;
 		shift
 	fi
@@ -492,15 +453,11 @@ _expire(){
 
 	savecount=`zfs get -H -o value zrep:savecount $1`
 	# do not use (()) in case value unset
-	if [[ $savecount < 1 ]] ; then
-		zrep_errquit zrep:savecount on $1 set to improper value $savecount
-	fi
+	[ ${savecount} -lt < 1 ] && zrep_errquit zrep:savecount on $1 set to improper value $savecount
 
-	if [[ "$master" == "yes" ]] ; then
+	if [ "$master" = "yes" ] ; then
 		lastsent=`getlastsnapsent $1`
-		if [[ "$lastsent" == "" ]] ; then
-			zrep_errquit corrupted zrep data: no last sent detected. Stopping expire
-		fi
+		[ -z "$lastsent" ] && zrep_errquit corrupted zrep data: no last sent detected. Stopping expire
 
 		getallsnaps $1 |egrep -v $lastsent >$tmpfile
 		savecount=$((savecount-1))
@@ -509,7 +466,7 @@ _expire(){
 	fi
 	currcount=`wc -l < $tmpfile`
 
-	if ((currcount > savecount )) ; then
+	if [ ${currcount} -gt ${savecount} ] ; then
 		currcount=$((currcount - savecount))
 
 		head -$currcount $tmpfile >$tmpfile.2
@@ -522,7 +479,7 @@ _expire(){
 	rm $tmpfile
 	
 
-	if [[ "$master" != "yes" ]] || ((local ==1)) ; then
+	if [ "$master" != "yes" -o ${local} -eq 1 ] ; then
 		#This fs is dest fs. We are done.
 		return
 		#otherwise, go expire on remote side as well
@@ -534,9 +491,7 @@ _expire(){
 	sanity=`zrep_ssh $remotehost zfs get -H -o value -s local zrep:master $remotefs`
 
 	# Normally, dont quit on error. But this is super-bad.
-	if [[ "$sanity" == "yes" ]] ; then
-		zrep_errquit "Remote side also marked as master ** $remotehost:$remotefs"
-	fi
+	[ "$sanity" = "yes" ] && zrep_errquit "Remote side also marked as master ** $remotehost:$remotefs"
 
 	zrep_ssh $remotehost $ZREP_PATH expire $remotefs ||print REMOTE expire failed
 }
@@ -557,14 +512,14 @@ _expire(){
 zrep_expire()
 {
 	typeset local
-	if [[ "$1" == "-L" ]] ; then
+	if [ "$1" = "-L" ] ; then
 		local="-L"
 		shift
 	fi
 
-	if [[ "$1" == "all" ]] ; then
+	if [ "$1" = "all" ] ; then
 		set -- `zrep_list`
-	elif [[ "$1" == "" ]] ; then
+	elif [ -z "$1" ] ; then
 		set -- `zrep_list_master`
 	fi
 
@@ -572,7 +527,7 @@ zrep_expire()
 	# filesystem. Otherwise we risk letting server selfdestruct fill
 	# over one troublesome filesystem
 	#
-	while [[ "$1" != "" ]] ; do
+	while [ -n "$1" ] ; do
 		zrep_lock_fs $1
 		print Expiring zrep snaps on $1
 		 _expire $local $1 || print WARNING: expire failed for $1

@@ -21,7 +21,7 @@ Z_LOCAL_HOST=${Z_LOCAL_HOST%%.*}
 # Solaris hack, to use native perl, which isnt always in $PATH,but should
 # always be there. It's also simple, straightforward, and non-extended.
 # But on other OSs will fall back to use default perl.
-PERL_BIN=${PERL_BIN:-/usr/perl5/bin}
+PERL_BIN=${PERL_BIN:-/usr/local/bin}
 
 # Capability for this  does not show in usage.
 # So, just tie this to MU6 related check,like HAS_SNAPPROPS
@@ -74,7 +74,7 @@ else
 	fi
 fi
 
-if ((Z_HAS_X)) ; then
+if [ ${Z_HAS_X} ] ; then
 	Z_HAS_O=1  # can recv use -o option
 else
 	Z_HAS_O=0
@@ -86,9 +86,7 @@ Z_LOCK_RETRY=${Z_LOCK_RETRY:-10}  # default 10 second  retry, 1 per sec
 Z_SAVE_COUNT=${Z_SAVE_COUNT:-5}
 Z_GLOBAL_LOCKFILE=/var/run/zrep.lock
 
-if [[ "$Z_GLOBAL_PID" == "" ]] ; then
-	export Z_GLOBAL_PID=$$
-fi
+[ -z "$Z_GLOBAL_PID" ] && export Z_GLOBAL_PID=$$
 
 Z_SETHOLD=${Z_SETHOLD:-"zfs hold"}
 # if your zfs isnt new enough, and you like to live dangerously, 
@@ -104,11 +102,9 @@ Z_SETHOLD=${Z_SETHOLD:-"zfs hold"}
 #
 zrep_has_global_lock(){
 	lockpid=`ls -l $Z_GLOBAL_LOCKFILE 2>/dev/null |awk -F/ '{print $NF}'`
-	if [[ "$lockpid" == "" ]] ; then return 1 ; fi
-	if [[ "$lockpid" != "$Z_GLOBAL_PID" ]] ; then
-		if [[ "$lockpid" != "$$" ]] ; then
-			return 1
-		fi
+	if [ -z "$lockpid" ] ; then return 1 ; fi
+	if [ "$lockpid" != "$Z_GLOBAL_PID" ] ; then
+		[ "$lockpid" != "$$" ] && return 1
 	fi
 
 	return 0
@@ -127,7 +123,7 @@ zrep_get_global_lock(){
 	# Check for dead old holder first.
 	# CANNOT CLEAN UP OURSELVES: race condition problems.
 	
-	while (( retry_count > 0 )); do
+	while [ ${retry_count} -gt 0 ]; do
 		sleep 1
 		ln -s /proc/$Z_GLOBAL_PID $Z_GLOBAL_LOCKFILE && return 0
 		retry_count=$((retry_count-1))
@@ -154,10 +150,10 @@ zrep_fs_lock_pid(){
 }
 zrep_has_fs_lock(){
 	typeset check=`zfs get -H -o value zrep:lock-pid $1`
-	if ((check == $$)) ; then
-	return 0
+	if [ $check -eq $$ ]; then
+	    return 0
 	else
-	return 1
+	    return 1
 	fi
 }
 
@@ -170,7 +166,7 @@ zrep_has_fs_lock(){
 zrep_lock_fs(){
 	# global lock is slow. so do quickcheck first.
 	typeset check=`zrep_fs_lock_pid $1` newcheck
-	if [[ "$check" != "-" ]] ; then
+	if [ "$check" != "-" ] ; then
 		# validate fs lock before giving up
 		ls -d /proc/$check >/dev/null 2>&1 && return 1
 	fi
@@ -178,16 +174,15 @@ zrep_lock_fs(){
 	zrep_get_global_lock  || return 1
 
 	# Double-check if needed, now that we have global lock
-	if [[ "$check" != "-" ]] ; then
+	if [ "$check" != "-" ] ; then
 		newcheck=`zrep_fs_lock_pid $1`
-		if [[ "$newcheck" != "$check" ]] && [[ "$newcheck" != "-" ]]
-		then
+		if [ "$newcheck" != "$check"  -a "$newcheck" != "-" ]; then
 			# oops. someone else must have dealt with it.
 			# If they havent reset it to "-" then give up
 			zrep_release_global_lock
 			return 1
 		fi
-		print DEBUG: overiding stale lock on $1 from pid $check >/dev/fd/2
+		echo DEBUG: overiding stale lock on $1 from pid $check >/dev/fd/2
 	fi
 	
 	zfs set zrep:lock-pid=$$ $1
@@ -200,7 +195,7 @@ zrep_lock_fs(){
 # dont exit program if we dont have lock. But do return error
 zrep_unlock_fs(){
 	typeset lockpid=`zrep_fs_lock_pid $1`
-	if ((lockpid != $$)) ; then return 1; fi
+	if [ ${lockpid} -ne $$ ] ; then return 1; fi
 
 	#since "we" already have it locked, no need to get global lock first
 	zfs inherit zrep:lock-time $1
@@ -219,7 +214,7 @@ zrep_errquit(){
 	print Error: "$@" >/dev/fd/2
 
 	if zrep_has_global_lock ; then
-		if [[ "$$" -ne "$Z_GLOBAL_PID" ]] ; then
+		if [ "$$" -ne "$Z_GLOBAL_PID" ] ; then
 			print EXTRA-ERROR: Running in child proc.
 			print 'Not sure whether to release global lock. NOT releasing!'
 			exit 1
@@ -250,7 +245,6 @@ zrep_ssh(){
 }
 
 zrep_gettimeinseconds(){
-	# unfortunately, solaris date doesnt do '%s', so need to use perl
 	typeset PATH=$PERL_BIN:$PATH
-	perl -e 'print int(time);'
+	date +%s
 }
