@@ -101,14 +101,14 @@ Z_SETHOLD=${Z_SETHOLD:-"zfs hold"}
 #Z_SETHOLD="echo skipping zfs hold on"
 
 
-
-
 # return 0 if "we" are holding lock, 1 otherwise
 # Note that we check for "us, OR our global parent", if different
 #
 zrep_has_global_lock(){
-	lockpid=`ls -l $Z_GLOBAL_LOCKFILE 2>/dev/null |awk -F/ '{print $NF}'`
-	[ -z "${lockpid}" ] && return 1
+
+	[ ! -f "${Z_GLOBAL_LOCKFILE}" ] && return 1
+	lockpid=`cat ${Z_GLOBAL_LOCKFILE}`
+
 	if [ "$lockpid" != "$Z_GLOBAL_PID" ] ; then
 		[ "$lockpid" != "$$" ] && return 1
 	fi
@@ -117,25 +117,34 @@ zrep_has_global_lock(){
 }
 
 
-
 #Note: it is an ERROR to call this if you already have lock
 #It is binary, not recursive ownership.
 zrep_get_global_lock(){
 	local retry_count=$Z_LOCK_RETRY
 
-	ln -s /proc/$Z_GLOBAL_PID $Z_GLOBAL_LOCKFILE && return 0
+	trap "rm -f ${Z_GLOBAL_LOCKFILE}" HUP INT ABRT BUS TERM EXIT
+
+	if  [ ! -f "${Z_GLOBAL_LOCKFILE}" ] ; then
+	    echo $Z_GLOBAL_PID > $Z_GLOBAL_LOCKFILE 
+	    return 0
+	fi
 
 	# otherwise, deal with fail
 	# Check for dead old holder first.
 	# CANNOT CLEAN UP OURSELVES: race condition problems.
+	echo "RC: $retry_count"
 	
 	while [ ${retry_count} -gt 0 ]; do
-		sleep 1
-		ln -s /proc/$Z_GLOBAL_PID $Z_GLOBAL_LOCKFILE && return 0
-		retry_count=$((retry_count-1))
+	    echo "Waiting for acquire lock"
+	    sleep 1
+		if  [ ! -f "${Z_GLOBAL_LOCKFILE}" ] ; then
+        	    echo $Z_GLOBAL_PID > $Z_GLOBAL_LOCKFILE
+        	    return 0
+    		fi
+	    retry_count=$((retry_count-1))
 	done
 
-	echo Failed to acquire global lock 
+	echo "Failed to acquire global lock"
 	return 1
 }
 
@@ -173,11 +182,9 @@ zrep_lock_fs(){
 	# global lock is slow. so do quickcheck first.
 	local check=`zrep_fs_lock_pid $1` newcheck
 
-echo "ls -d /proc/${check}"
-
 	if [ "${check}" != "-" ] ; then
 		# validate fs lock before giving up
-		ls -d /proc/$check >/dev/null 2>&1 && return 1
+		[ -f "${Z_GLOBAL_LOCKFILE}" ] && return 1
 	fi
 
 	zrep_get_global_lock  || return 1
@@ -191,7 +198,7 @@ echo "ls -d /proc/${check}"
 			zrep_release_global_lock
 			return 1
 		fi
-		echo DEBUG: overiding stale lock on $1 from pid $check >/dev/fd/2
+		echo "DEBUG: overiding stale lock on $1 from pid $check >/dev/fd/2"
 	fi
 	
 	zfs set zrep:lock-pid=$$ $1
