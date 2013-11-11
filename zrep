@@ -1370,8 +1370,8 @@ zrep_failover(){
 	echo setting readonly on local $fs, then syncing
 	zfs set readonly=on $fs
 
-	if [ ${local} -eq ] ; then
-		echo failover for $1 in LOCAL mode
+	if [ ${local} -eq 1 ] ; then
+		echo "failover for $1 in LOCAL mode"
 		if [ -z "$snap" ] ; then
 			snap=`getlastsnapsent $1`
 			zfs list $1 >/dev/null ||
