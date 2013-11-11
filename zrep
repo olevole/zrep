@@ -1032,9 +1032,7 @@ zrep_sync(){
 		quiettime="$2"
 		shift
 		shift
-		if [ ${quiettime} -lt < 30 ] ; then
-			zrep_errquit "-q must use value greater than 30"
-		fi
+		[ ${quiettime} -lt 30 ] && zrep_errquit "-q must use value greater than 30"
 	fi
 
 	if [ "$1" = "all" ] ; then
