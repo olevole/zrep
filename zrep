@@ -249,7 +249,6 @@ zrep_ssh(){
 			;;
 	esac
 	shift
-echo "SSH: ${ssh_cmd} $@"
 	$ssh_cmd "$@"
 }
 
