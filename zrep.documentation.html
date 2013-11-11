@@ -1,0 +1,312 @@
+<title>Zrep documentation</title>
+
+
+<h1>Zrep documentation</h1>
+
+This document covers a general overview of 
+<a href="http://www.bolthole.com/solaris/zrep/">zrep</a>, as well as giving specific
+examples for use cases.
+
+<h2>Contents</h2>
+<ul>
+<li><a href="#overview">Overview</a>
+<li><a href="#init">Initialization</a>
+<li><a href="#replication">Replication updates zrep</a>
+<li><a href="#failover">Failover</a>
+<li><a href="#takeover">Takeover</a>
+<li><a href="#status">Status</a>
+<li><a href="#tuning">Tuning</a>
+<li><a href="#backupserver">Using as a backup server</a>
+</ul>
+
+
+
+<a name="overview"></a>
+<h2>Overview of zrep</h2>
+<blockquote>
+Zrep is designed to be a robust, yet simple, mechanism to keep a pair of zfs
+filesystems in sync, in a highly efficient manner.
+It can be used on as many filesystems on a server as
+you like. It relies on ssh trust between hosts.
+<p>
+There are two general areas where you might consider zrep:
+<ol>
+<li> High availability style failover of filesystems between two servers
+<li> A centralized backup server
+</ol>
+
+Since the original design spec of zrep was for the failover case, most of
+the documentation is geared towards that. However, there is a section at
+the end geared towards the secure backup server case.
+
+</blockquote>
+
+<blockquote>
+<hr>
+Please note that, while the "backup server" requires only one-way trust, 
+the other usage examples below presume that you have two-way ssh trust,
+and OS+filesystem targets similar to the following:
+
+<pre>
+host1 - zfs pool "pool1", with ZFS version equivalent to solaris 10 update 9+
+	root ssh trust to/from host2
+
+host2 - zfs pool "pool2", with ZFS version equivalent to solaris 10 update 9+
+	root ssh trust to/from host1
+</pre>
+
+host1 and host2 are able to "ping" and "ssh" to/from each other
+
+<p>
+Reminder, that to allow root ssh trust, you may have to
+<ul>
+
+<li> create new "ssh keys" for root, in ~root/.ssh/
+<li> copy over to otherhost:~root/.ssh/authorized_keys
+<li> edit /etc/ssh/sshd_config to PermitRootLogin without-password
+<li> edit /etc/default/login to comment out CONSOLE=xxx
+</ul>
+
+<hr>
+</blockquote>
+
+
+<a name="init"></a>
+<h2>Initialization of zrep replicated filesystem "prodfs"</h2>
+
+<blockquote>
+<pre>
+	host1# zrep -i pool1/prodfs host2 pool
+</pre>
+
+This will create an initial snapshot on prodfs. 
+It will then a copy of "prodfs" on host2, and set
+"readonly" on there.
+<p>
+For faster initialization, I strongly suggest that you use
+<a href="http://www.psc.edu/networking/projects/hpn-ssh/">
+http://www.psc.edu/networking/projects/hpn-ssh/</a>, a patched version of
+openssh. When use use it for both sshd and ssh, you can achieve throughput
+of 2x better or more, than standard ssh.
+Change which ssh binary zrep uses, by setting the SSH environment variable
+to the explicit binary path you wish to be used.
+<p>
+
+For regular, frequently done post-initial syncs, the amount of data to be
+copied will proably be relatively small, so the speed of ssh does not
+matter as much in that case.
+
+</blockquote>
+
+<a name="replication"></a>
+<h2>Replication</h2>
+<blockquote>
+
+<pre>
+	host1# zrep -S pool1/prodfs
+</pre>
+	You can call this manually, or from a cron job as frequently
+	as once a minute.
+	It will know from initialization, where to replicate the
+	filesystem to, and do so.
+<p>
+	If you have more than one filesystem to sync, you may also use
+
+<pre>
+	# zrep -S all
+</pre>
+	You can safely set up a cronjob on both host1 and host2 to do
+	"all", and it will "do the right thing", for the most part.
+	However, to avoid potential harmless errors for conflicts on overly
+	long syncs, you can set a "quiet limit" for syncs.
+<pre>	
+	# zrep sync -q NUMBER-OF-SECONDS all
+</pre>
+	Then, if it has been less than NUMBER-OF-SECONDS since last succesful
+	sync for a filesystem, it will benignly continue to the next
+	filesystem, with a small note on stdout
+</blockquote>
+
+
+<a name="failover"></a>
+<h2>Failover</h2>
+<blockquote>
+
+<pre>	host1# zrep failover pool1/prodfs
+</pre>
+	In planned failover situations, you probably want to run something
+	from your production side. This is it.
+<p>
+	This will configure each side to know that the flow of data
+	should now be host2 -> host1, and flip readonly bits appropriately.
+
+	Running "zrep -S all" on host1 will then ignore pool1/prodfs
+	Running "zrep -S all" on host2 will sync
+	   pool2/prodfs to pool1/prodfs
+<p>
+	If, in contrast, you have already completed an emergency
+	"takeover" from the other side, you can officially acknowlege the
+	remote side as master, with
+<pre>
+	host1# zrep failover -L  pool1/prodfs
+</pre>
+
+</blockquote>
+
+<a name="takeover"></a>
+<h2>Takeover</h2>
+<blockquote>
+
+<pre>	host2# zrep takeover pool2/prodfs
+</pre>
+	This is basically the same as "planned failover" example, but the
+	required syntax for running on the standby host.
+<p.
+	For EMERGENCY failover purposes, where the primary host is down,
+	you should instead force takeover by this host, with
+<p>
+<pre>
+	host2# zrep takeover -L pool2/prodfs
+</pre>
+</blockquote>
+
+<a name="status"></a>
+
+<h2>Status</h2>
+<blockquote>
+You can find the status of zrep managed filesystems in multiple ways.
+To simply find a list of them, use
+<pre>	hostX# zrep list
+</pre>
+
+This will give you a list of all zrep related filesystems. 
+If you want to see all the internal zrep related zfs properties, add the
+-v flag.
+
+<p>
+To see the status of all zrep "master" filesystems, use
+<pre>	hostX# zrep status
+</pre>
+This will give a list of zrep managed filesystems the host is "master" for,
+and the date of the last successfully replicated snapshot.<br>
+You can see the status of all zrep filesystems, use -a.
+<p>
+If you have a mix of master, and slave, filesystems,you may wish to use the
+-v flag, which will show both the source and destination, as well as the
+last synced time. Please note that the order of flags does matter.
+So,
+
+<pre>	hostX# zrep status -v -a
+</pre>
+
+
+<p>
+
+
+</blockquote>
+
+<a name="tuning"></a>
+<h2> Archive tuning</h2>
+<blockquote>
+
+	With currently planned architecture, the number of
+	zrep-recognized snapshots will be the same on both sides.
+	However, even if that were not the case, it would be
+	non-optimal to set the remote zrep preserve count to be
+	very high, since zrep is expected to be run very frequenly
+	(once per minute)
+<p>
+	Additional problem: you CANNOT manually create snapshots on
+	remote side, because then incremental repliation will fail,
+	due to the target "not being the most recent snapshot"
+
+<p>
+	Because of these issues, the best way to keep archives, may be
+	one of the following methods:
+<p>
+	a) create non-zrep-recognized snapshots on local side.
+	   Delete locally, but not remotely
+	   zfs send -I will copy over even non-recognized "new" snapshots.
+	   The problem with this, is that they will accumilate on the
+	   other side, so dont forget to have some kind of cleanup job
+	   remotely
+<p>
+	b) schedule 'clone' jobs on remote side.
+	   pick the most recent zrep snapshot, and create a filesystem
+	   clone. This will not dupliacate the files on disk, and also
+	   not interfere with ongoing zrep snapshot/replication activity
+	   Again, care must be taken not to leave the clones around
+	   indefinitely, to the point where they fill available space.
+
+
+
+	
+</blockquote>
+
+
+<hr>
+<hr>
+
+<a name="backupserver"></a>
+<h2> Use in a backup server</h2>
+<blockquote>
+Some folks may be looking just for a way to simplify their backup
+mechanisms, rather than doing fancy failover. In this scenario, there is
+one centralized backup server that has trusted root ssh OUT, but does not
+allow root ssh IN. (This way, it is possible to have independant clients,
+in separate zones of trust or system administration from each other)
+<p>
+In this setup, typical setup and use would look something like the
+following.
+<p>
+<ol>
+<li> Set up the filesystem initially on the backup server
+<li> Do "zrep init {localfs} {clienthost} {clientfs}"
+<li> "zrep failover {localfs}"
+</ol>
+
+You have now set up initial state cleanly.
+<blockquote>
+<font size=-2>
+If you already have a client zfs filesystem with a bunch of data, it is
+technically possible to do a manual initialization to the backup server.
+However, this is not supported at this time. A smart sysadmin should be
+able to figure out what is needed by looking at the output of "zrep list
+-v" after a normal init
+</font>
+</blockquote>
+
+Once this is done, you can then set up a special zrep job on the backup
+server, instead of the master. It will look just like a "zrep sync" job,
+but instead, you will want to call
+<pre>
+	zrep refresh pool/fs
+</pre>
+
+Now, instead of the master side "pushing" new data, you will be "pulling"
+the latest bits to your read-only backup server copy of the filesystem.
+<p>
+
+<h3> Disaster recovery in backup server mode</h3>
+<b>Note: This section is specific to running zrep as part of a "backup
+server" type situation.</b>  For more normal zrep usage, see higher up in this
+page.
+<p>
+If you get into the situation where you have lost a client filesystem (or
+worse yet, the entire remote server), the good news is that it should be
+relatively straightforward to reinitialize, using the following steps:
+
+<ol>
+<li>Get the filesystem on the backup server, to be exactly how you need it
+to be.
+<li> If there is some reason you wish to preserve some point-in-time
+snapsnots, make your own by hand that dont start with "zrep"
+<li> Clear all zfs snapshots and information, by using "zrep clear pool/fs"
+<li> Do a full resync to the remote host, with <br>
+  "zrep init pool/fs client remotepool/fs"
+</ol>
+
+That should be all that is required to get you up and running again!
+
+</blockquote>
+

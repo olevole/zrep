@@ -1,0 +1,161 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN"> 
+<HTML>
+<HEAD>
+<LINK HREF="/logo.css" REL="stylesheet" TYPE="text/css">
+<STYLE TYPE="text/css">
+<!--
+body	{ 
+	font: 14px Verdana, Arial,sans-serif;
+	}
+
+--> </!-->
+</STYLE>
+
+<title> zrep troubleshooting</title>
+
+<META name="keywords"
+content="zfs,failover,replication,sync,troubleshooting">
+
+</HEAD>
+
+<BODY bgcolor="#ffffff" text="#000000" link="#00a0a0" vlink="#505050" alink="#ffffff">
+
+<H1 ALIGN=center>zrep troubleshooting</H1>
+
+<span title="Pixxel the ferret, courtesy of the Ferret Photo Gallery, http://www.ferretcentral.org/gallery/">
+<div id=logobox>
+<!-- This gives us an invisible box over our "background" logo
+     which then can allow for the "span" mouseover to work -->
+</div>
+</span>
+
+<div id="contents">
+<!-- This is for entire rest of page -->
+
+zrep is, by design, fairly simple. It is based around zfs properties.
+Therefore, when in doubt, check the properties.
+zrep gives an easy way to do this.
+<P>
+
+Here is an example of a set of properties for zrep replicating to a
+filesystem on the same host:
+
+<blockquote>
+<pre>
+# ./zrep list -v scratch/zreptest       
+scratch/zreptest:
+zrep:src-fs     scratch/zreptest
+zrep:src-host   hamachi
+zrep:dest-fs    scratch/zreptest_2
+zrep:master     yes
+zrep:savecount  5
+zrep:dest-host  hamachi
+</pre>
+</blockquote>
+
+For a destination filesystem, the properties would be mostly the same.
+The only difference would be, instead of <code>"zrep:master  yes"</code>,
+you would see
+<code>"readonly        on"</code>
+
+<h2> ZFS property overview</h2>
+
+
+<h3> Fixing zfs properties</h3>
+To manually change a zfs property, use
+<blockquote>
+<pre>
+zfs set zrep:something=newval  file/system
+</pre>
+</blockquote>
+
+To remove a property, zfs is a little odd. The standard (and in fact, only)
+way of removing a property in zfs, is as follows:
+
+<blockquote>
+<pre>
+zfs inherit zrep:master  file/system
+</pre>
+</blockquote
+
+This tells zfs to set the value type of that property, to be "inherited"
+from the parent filesystem. Since the parent usually does not have any
+zrep properties, that effectively 'removes' a property from a filesystem or
+snapshot.
+
+<h3> Fixing snapshot properties</h3>
+There is only one property that zrep currently cares about for
+snapshots:<br>
+<pre>
+zrep:sent
+</pre>
+<p>
+This contains a timestamp based value of the time it was successfully synced to
+the target system.
+Both the src snapshot, and the target-side snapshot, have this value, since
+it is crucial in allowing smooth failover from src to test.
+
+<h2> Bad status output</h2>
+You will hopefully never see the following:
+<pre>
+# zrep status
+scratch/zreptest                              synced as of [NEVER]
+</pre>
+
+If you do, it means that either there is no zrep snapshot present, or the
+snapshot does not have the "zrep:sent" property. 
+<P>
+If there is no snapshot, then you will need to do a full reinitialization
+of zrep sync and data, via
+<pre>
+zrep clear scratch/zreptest
+zrep init scratch/zreptest desthost destfs
+</pre>
+
+<h3> Setting the zrep:sent property</h3>
+If there IS a snapshot of the form @zrep-######, but zrep status is not
+picking it up, then you will have to
+manually set a "sent" property value.
+The simplest and safest thing to do in this specific case, is to set it to "1",
+via the following:
+<pre>
+zfs set zrep:sent=1 scratch/zreptest@zrep-######
+</pre>
+
+Presuming that "zrep list -v scratch/zreptest" shows the usual properties
+(example at the top of this page),
+you should then be able to once more do "zrep sync" for it.
+<p>
+<h2>Converting normal snapshot to a zrep snapshot</h2>
+
+If for some reason, you have lost the "real" zrep snapshots, but have
+a snapshot that you created by hand on the
+master, and it also exists on the target, you should be able to rename the
+snapshot on both sides to be "<code>zrep-000000</code>".
+<p>
+Once that is done, set the zrep:sent value <u>on the snapshot</u> (not
+the filesystem) as mentioned above. You will also need to make sure there
+is a "zrep:master" property set to "yes".
+<p>
+You may also need a lastsent property. See which properties zrep likes to
+set on your version of zfs, by using "zrep list -v" on a working paired
+filesystem.
+<p>
+You should then be able to once more do zrep sync again.
+<p>
+Do note that you cannot just randomly create snapshots on both sides for
+this purpose.
+The snapshot on the target side, must have been created as a result of a
+zfs send/receive combination. That is the only way that zfs incremental
+receives can function.
+<P>
+<hr>
+Written by:<a href="mailto:phil@bolthole.com">Philip Brown</a>
+<br>
+<a href="http://www.bolthole.com/">Bolthole Top</a> 
+<a href="http://www.bolthole.com/search.html">Search Bolthole.com</a> 
+
+</div>
+
+</BODY>
+</HTML>
