@@ -1,9 +1,0 @@
-
-
-. ./zrep_vars
-
-print PATH is originally $PATH
-
-print time in seconds is: `zrep_gettimeinseconds`
-
-print PATH is now $PATH

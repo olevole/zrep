@@ -1,4 +1,6 @@
 ZREP replication and failover
 
-Rewrite code from ksh to sh. Original version: http://www.bolthole.com/solaris/zrep/
+The original version developed by Philip Brown. 
+Current version is the port from ksh to sh code with rewriting procfs-related code which is deprecated for FreeBSD.
+
 
