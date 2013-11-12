@@ -23,11 +23,6 @@ ZREP_PATH=${ZREP_PATH:-zrep}  #Set to /path/to/zrep, if needed, for remote
 Z_LOCAL_HOST=`uname -n`
 Z_LOCAL_HOST=${Z_LOCAL_HOST%%.*}
 
-# Solaris hack, to use native perl, which isnt always in $PATH,but should
-# always be there. It's also simple, straightforward, and non-extended.
-# But on other OSs will fall back to use default perl.
-PERL_BIN=${PERL_BIN:-/usr/local/bin}
-
 # Capability for this  does not show in usage.
 # So, just tie this to MU6 related check,like HAS_SNAPPROPS
 PROPTYPES="local,received" 
@@ -122,8 +117,6 @@ zrep_has_global_lock(){
 zrep_get_global_lock(){
 	local retry_count=$Z_LOCK_RETRY
 
-	trap "rm -f ${Z_GLOBAL_LOCKFILE}" HUP INT ABRT BUS TERM EXIT
-
 	if  [ ! -f "${Z_GLOBAL_LOCKFILE}" ] ; then
 	    echo $Z_GLOBAL_PID > $Z_GLOBAL_LOCKFILE 
 	    return 0
@@ -132,8 +125,6 @@ zrep_get_global_lock(){
 	# otherwise, deal with fail
 	# Check for dead old holder first.
 	# CANNOT CLEAN UP OURSELVES: race condition problems.
-	echo "RC: $retry_count"
-	
 	while [ ${retry_count} -gt 0 ]; do
 	    echo "Waiting for acquire lock"
 	    sleep 1
@@ -260,7 +251,6 @@ zrep_ssh(){
 }
 
 zrep_gettimeinseconds(){
-	local PATH=$PERL_BIN:$PATH
 	date +%s
 }
 ###### zrep_status
